@@ -61,8 +61,8 @@ globals:
     type: float
 
 i2c:
-  sda: GPIO9
-  scl: GPIO8 # swapped
+  sda: GPIO42
+  scl: GPIO41
   frequency: 400kHz
   scan: True
 
