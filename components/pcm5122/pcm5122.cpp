@@ -10,6 +10,9 @@ namespace esphome
 
     static const char *const TAG = "pcm5122";
     static const char *const ERROR = "Error ";
+    static const char *const MIXER_MODE = "Mixer Mode";
+
+    static const char* const MIXER_MODE_TEXT[] = {"STEREO", "STEREO_INVERSE", "RIGHT", "LEFT"};
 
     // maximum delay allowed in "pcm5122_minimal.h" used in configure_registers()
     static const uint8_t ESPHOME_MAXIMUM_DELAY = 5; // milliseconds
@@ -61,13 +64,14 @@ namespace esphome
       }
       this->number_registers_configured_ = counter;
 
-      // enable Pcm5122
       if (!this->set_deep_sleep_off_())
         return false;
 
-      // setup of mixer mode deferred to 'loop' once 'refresh_settings' runs
-      // if (!this->set_analog_gain_(this->pcm5122_state_.analog_gain))
-      //   return false;
+      if (!this->set_mixer_mode_(this->pcm5122_state_.mixer_mode))
+        return false;
+
+      if (!this->set_analog_gain_(this->pcm5122_state_.analog_gain))
+        return false;
 
       if (!this->set_state_(CTRL_PLAY))
         return false;
@@ -79,38 +83,10 @@ namespace esphome
 
     void Pcm5122Component::loop()
     {
-      // 'play_file' is initiated by YAML on_boot with priority 220.0f
-      // 'refresh_settings' is set by 'eq_gainband16000hz' or 'enable_eq_switch' (defined by YAML)
-      // both have setup priority AFTER_CONNECTION = 100.0f
-      // once pcm5122 has detected i2s clock then mixer mode and eq gains settings
-      // can be written within 'loop'
-
-      // // settings are only refreshed once
-      // // disable 'loop' once all eq gains have been written
-      // if (this->refresh_settings_complete_)
-      // {
-      //   this->disable_loop(); // requires Esphome 2025.7.0
-      //   return;
-      // }
-
-      // // refresh of settings has not been triggered yet
-      // if (!this->refresh_settings_triggered_)
-      //   return;
-
-      // // once refresh settings is triggered then wait 'DELAY_LOOPS' before proceeding
-      // // to ensure on boot sound has played and pcm5122 has detected i2s clock
-      // if (this->loop_counter_ < DELAY_LOOPS)
-      // {
-      //   this->loop_counter_++;
-      //   return;
-      // }
-
-      return;
     }
 
     void Pcm5122Component::update()
     {
-      // nothing to do yet
     }
 
     void Pcm5122Component::dump_config()
@@ -127,18 +103,16 @@ namespace esphome
         LOG_I2C_DEVICE(this);
         ESP_LOGCONFIG(TAG,
                       "  Registers configured: %i\n"
-                      // "  DAC mode: %s\n"
-                      // "  Mixer mode: %s\n"
-                      // "  Analog Gain: %3.1fdB\n"
-                      // "  Maximum Volume: %idB\n"
-                      // "  Minimum Volume: %idB\n",
-                      ,
-                      this->number_registers_configured_
-                      // this->pcm5122_state_.dac_mode ? "PBTL" : "BTL",
-                      // MIXER_MODE_TEXT[this->pcm5122_state_.mixer_mode],
-                      // this->pcm5122_state_.analog_gain,
-                      // this->pcm5122_state_.volume_max,
-                      // this->pcm5122_state_.volume_min
+                      "  Analog Gain: %idB\n"
+                      "  Maximum Volume: %idB\n"
+                      "  Minimum Volume: %idB\n"
+                      "  Mixer Mode: %s\n",
+  
+                      this->number_registers_configured_,
+                      this->pcm5122_state_.analog_gain,
+                      this->pcm5122_state_.volume_max,
+                      this->pcm5122_state_.volume_min,
+                      MIXER_MODE_TEXT[this->pcm5122_state_.mixer_mode]
         );
         LOG_UPDATE_INTERVAL(this);
         break;
@@ -198,41 +172,54 @@ namespace esphome
     }
 
     // protected
-    // bool Pcm5122Component::get_analog_gain_(uint8_t *raw_gain)
-    // {
-    //   uint8_t current;
-    //   if (!this->pcm5122_read_byte_(PCM5122_AGAIN, &current))
-    //     return false;
-    //   // remove top 3 reserved bits
-    //   *raw_gain = current & 0x1F;
-    //   return true;
-    // }
+    bool Pcm5122Component::get_analog_gain_(int8_t *gain_db)
+    {
+      *gain_db = this->pcm5122_state_.analog_gain;
+      return true;
+    }
 
-    // Analog Gain Control , with 0.5dB one step
-    // lower 5 bits controls the analog gain.
-    // 00000: 0 dB (29.5V peak voltage)
-    // 00001: -0.5db
-    // 11111: -15.5 dB
-    // set analog gain in dB
-    // bool Pcm5122Component::set_analog_gain_(float gain_db)
-    // {
-    //   if ((gain_db < PCM5122_MIN_ANALOG_GAIN) || (gain_db > PCM5122_MAX_ANALOG_GAIN))
-    //     return false;
+    // Analog Gain Control -6 dB or 0 dB
+    // OdB corresponds to 2V RMS output
+    // -6dB corresponds to 1V RMS output
+    bool Pcm5122Component::set_analog_gain_(int8_t gain_db)
+    {
+      if ((gain_db != 0) && (gain_db != -6))
+        return false;
 
-    //   uint8_t new_again = static_cast<uint8_t>(-gain_db * 2.0);
+      if (!this->set_page_(PCM51XX_PAGE_ONE))
+      {
+        ESP_LOGE(TAG, "%s begin get %s", ERROR, "Analog Gain");
+        return false;
+      }
+      uint8_t current = 0;
+      if (!this->pcm5122_read_byte_(PCM51XX_REG_AGAIN, &current))
+      {
+        ESP_LOGE(TAG, "%s read %s", ERROR, "Analog Gain");
+        return false;
+      }
 
-    //   uint8_t current_again;
-    //   if (!this->pcm5122_read_byte_(PCM5122_AGAIN, &current_again))
-    //     return false;
+      if (gain_db == 0)
+        // set 0-th and 5-th bit to 0 for 0dB
+        current = current & 0xEE;
+      else
+        // set 0-th and 5-th bit to 1 for -6dB
+        current = current | PCM51XX_REG_AGAIN_MINUS6DB;
 
-    //   // keep top 3 reserved bits combine with bottom 5 analog gain bits
-    //   new_again = (current_again & 0xE0) | new_again;
-    //   if (!this->pcm5122_write_byte_(PCM5122_AGAIN, new_again))
-    //     return false;
+      if (!this->pcm5122_write_byte_(PCM51XX_REG_AGAIN, current))
+      {
+        ESP_LOGE(TAG, "%s write %s", ERROR, "Analog Gain");
+        return false;
+      }
+      if (!this->set_page_(PCM51XX_PAGE_ZERO))
+      {
+        ESP_LOGE(TAG, "%s finish get %s", ERROR, "Analog Gain");
+        return false;
+      }
 
-    //   ESP_LOGD(TAG, "Analog Gain: %fdB", gain_db);
-    //   return true;
-    // }
+      this->pcm5122_state_.analog_gain = gain_db;
+      ESP_LOGD(TAG, "Analog Gain: %fdB", gain_db);
+      return true;
+    }
 
     bool Pcm5122Component::set_deep_sleep_off_()
     {
@@ -291,102 +278,48 @@ namespace esphome
       return true;
     }
 
-    // bool Pcm5122Component::get_mixer_mode_(MixerMode *mode)
-    // {
-    //   *mode = this->pcm5122_state_.mixer_mode;
-    //   return true;
-    // }
+    bool Pcm5122Component::get_mixer_mode_(MixerMode *mode)
+    {
+      *mode = this->pcm5122_state_.mixer_mode;
+      return true;
+    }
 
-    // // only runs once from 'loop'
-    // // 'mixer_mode_configured_' used by 'loop' to ensure only runs once
-    // bool Pcm5122Component::set_mixer_mode_(MixerMode mode)
-    // {
-    //   uint32_t mixer_l_to_l, mixer_r_to_r, mixer_l_to_r, mixer_r_to_l;
+    bool Pcm5122Component::set_mixer_mode_(MixerMode mode)
+    {
+      uint8_t mixer_value = 0;
+      switch (mode)
+      {
+      case STEREO:
+        mixer_value = PCM51XX_REG_MIXER_VAL_STEREO;
+        break;
 
-    //   switch (mode)
-    //   {
-    //   case STEREO:
-    //     mixer_l_to_l = PCM5122_MIXER_VALUE_0DB;
-    //     mixer_r_to_r = PCM5122_MIXER_VALUE_0DB;
-    //     mixer_l_to_r = PCM5122_MIXER_VALUE_MUTE;
-    //     mixer_r_to_l = PCM5122_MIXER_VALUE_MUTE;
-    //     break;
+      case STEREO_INVERSE:
+        mixer_value = PCM51XX_REG_MIXER_VAL_STEREO_INV;
+        break;
 
-    //   case STEREO_INVERSE:
-    //     mixer_l_to_l = PCM5122_MIXER_VALUE_MUTE;
-    //     mixer_r_to_r = PCM5122_MIXER_VALUE_MUTE;
-    //     mixer_l_to_r = PCM5122_MIXER_VALUE_0DB;
-    //     mixer_r_to_l = PCM5122_MIXER_VALUE_0DB;
-    //     break;
+      case LEFT:
+        mixer_value = PCM51XX_REG_MIXER_VAL_LEFT;
+        break;
 
-    //   case MONO:
-    //     mixer_l_to_l = PCM5122_MIXER_VALUE_MINUS6DB;
-    //     mixer_r_to_r = PCM5122_MIXER_VALUE_MINUS6DB;
-    //     mixer_l_to_r = PCM5122_MIXER_VALUE_MINUS6DB;
-    //     mixer_r_to_l = PCM5122_MIXER_VALUE_MINUS6DB;
-    //     break;
+      case RIGHT:
+        mixer_value = PCM51XX_REG_MIXER_VAL_RIGHT;
+        break;
 
-    //   case LEFT:
-    //     mixer_l_to_l = PCM5122_MIXER_VALUE_0DB;
-    //     mixer_r_to_r = PCM5122_MIXER_VALUE_MUTE;
-    //     mixer_l_to_r = PCM5122_MIXER_VALUE_0DB;
-    //     mixer_r_to_l = PCM5122_MIXER_VALUE_MUTE;
-    //     break;
+      default:
+        ESP_LOGD(TAG, "Invalid %s", MIXER_MODE);
+        return false;
+      }
 
-    //   case RIGHT:
-    //     mixer_l_to_l = PCM5122_MIXER_VALUE_MUTE;
-    //     mixer_r_to_r = PCM5122_MIXER_VALUE_0DB;
-    //     mixer_l_to_r = PCM5122_MIXER_VALUE_MUTE;
-    //     mixer_r_to_l = PCM5122_MIXER_VALUE_0DB;
-    //     break;
+      if (!this->pcm5122_write_byte_(PCM51XX_REG_MIXER, mixer_value))
+      {
+        ESP_LOGE(TAG, "%s Mixer L-L Gain", ERROR);
+        return false;
+      }
 
-    //   default:
-    //     ESP_LOGD(TAG, "Invalid %s", MIXER_MODE);
-    //     return false;
-    //   }
-
-    //   if (!this->set_book_and_page_(PCM5122_REG_BOOK_5, PCM5122_REG_BOOK_5_MIXER_PAGE))
-    //   {
-    //     ESP_LOGE(TAG, "%s begin Set %s", ERROR, MIXER_MODE);
-    //     return false;
-    //   }
-
-    //   if (!this->pcm5122_write_bytes_(PCM5122_REG_LEFT_TO_LEFT_GAIN, reinterpret_cast<uint8_t *>(&mixer_l_to_l), 4))
-    //   {
-    //     ESP_LOGE(TAG, "%s Mixer L-L Gain", ERROR);
-    //     return false;
-    //   }
-
-    //   if (!this->pcm5122_write_bytes_(PCM5122_REG_RIGHT_TO_RIGHT_GAIN, reinterpret_cast<uint8_t *>(&mixer_r_to_r), 4))
-    //   {
-    //     ESP_LOGE(TAG, "%s Mixer R-R Gain", ERROR);
-    //     return false;
-    //   }
-
-    //   if (!this->pcm5122_write_bytes_(PCM5122_REG_LEFT_TO_RIGHT_GAIN, reinterpret_cast<uint8_t *>(&mixer_l_to_r), 4))
-    //   {
-    //     ESP_LOGE(TAG, "%s Mixer L-R Gain", ERROR);
-    //     return false;
-    //   }
-
-    //   if (!this->pcm5122_write_bytes_(PCM5122_REG_RIGHT_TO_LEFT_GAIN, reinterpret_cast<uint8_t *>(&mixer_r_to_l), 4))
-    //   {
-    //     ESP_LOGE(TAG, "%s Mixer R-L Gain", ERROR);
-    //     return false;
-    //   }
-
-    //   if (!this->set_book_and_page_(PCM5122_REG_BOOK_CONTROL_PORT, PCM5122_REG_PAGE_ZERO))
-    //   {
-    //     ESP_LOGE(TAG, "%s end Set %s", ERROR, MIXER_MODE);
-    //     return false;
-    //   }
-
-    //   // 'pcm5122_state_' global already has mixer mode from YAML config
-    //   // save anyway so 'set_mixer_mode' could be used more generally in future
-    //   this->pcm5122_state_.mixer_mode = mode;
-    //   ESP_LOGD(TAG, "%s: %s", MIXER_MODE, MIXER_MODE_TEXT[this->pcm5122_state_.mixer_mode]);
-    //   return true;
-    // }
+      this->pcm5122_state_.mixer_mode = mode;
+      ESP_LOGD(TAG, "%s: %s", MIXER_MODE, MIXER_MODE_TEXT[this->pcm5122_state_.mixer_mode]);
+      return true;
+    }
 
     bool Pcm5122Component::get_state_(ControlState *state)
     {
@@ -405,25 +338,15 @@ namespace esphome
     }
 
     // low level functions
-    // bool Pcm5122Component::set_book_and_page_(uint8_t book, uint8_t page)
-    // {
-    //   if (!this->pcm5122_write_byte_(PCM5122_REG_PAGE_SET, PCM5122_REG_PAGE_ZERO))
-    //   {
-    //     ESP_LOGE(TAG, "%s page 0", ERROR);
-    //     return false;
-    //   }
-    //   if (!this->pcm5122_write_byte_(PCM5122_REG_BOOK_SET, book))
-    //   {
-    //     ESP_LOGE(TAG, "%s book 0x%02X", ERROR, book);
-    //     return false;
-    //   }
-    //   if (!this->pcm5122_write_byte_(PCM5122_REG_PAGE_SET, page))
-    //   {
-    //     ESP_LOGE(TAG, "%s page 0x%02X", ERROR, page);
-    //     return false;
-    //   }
-    //   return true;
-    // }
+    bool Pcm5122Component::set_page_(uint8_t page)
+    {
+      if (!this->pcm5122_write_byte_(PCM5122_REG_PAGE_SET, page))
+      {
+        ESP_LOGE(TAG, "%s page %d", ERROR, page);
+        return false;
+      }
+      return true;
+    }
 
     bool Pcm5122Component::pcm5122_read_byte_(uint8_t a_register, uint8_t *data)
     {

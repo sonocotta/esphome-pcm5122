@@ -1,21 +1,28 @@
 esphome:
-  name: hifi-esp32-plus
-  friendly_name: HiFi-ESP32-Plus
+  name: hifi-esp32s3-plus
+  friendly_name: HiFi-ESP32S3-Plus
   min_version: 2025.7.2
   platformio_options:
     board_build.flash_mode: dio
 
 esp32:
-  board: mhetesp32minikit
-  variant: esp32
-  flash_size: 8MB
+  board: esp32-s3-devkitc-1
+  variant: ESP32S3
+  flash_size: 16MB
   cpu_frequency: 240MHz
   framework:
     type: esp-idf
     version: recommended
     sdkconfig_options:
+      CONFIG_ESP32S3_DATA_CACHE_64KB: "y"
+      CONFIG_ESP32S3_DATA_CACHE_LINE_64B: "y"
+      CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB: "y"
+
+      CONFIG_ESP32_S3_BOX_BOARD: "y"
+
       CONFIG_BT_ALLOCATION_FROM_SPIRAM_FIRST: "y"
       CONFIG_BT_BLE_DYNAMIC_ENV_MEMORY: "y"
+
       CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC: "y"
       CONFIG_MBEDTLS_SSL_PROTO_TLS1_3: "y"  
       
@@ -38,6 +45,7 @@ wifi:
     password: !secret esphome_ap_password
 
 psram:
+  mode: octal
   speed: 80MHz
 
 external_components:
@@ -50,29 +58,29 @@ globals:
     type: float
 
 i2c:
-  sda: GPIO21
-  scl: GPIO27
+  sda: GPIO9
+  scl: GPIO8 # swapped
   frequency: 400kHz
   scan: True
 
 audio_dac:
   - platform: pcm5122
     id: pcm5122_dac
-    enable_pin: GPIO13
-    volume_max: 0dB
-    volume_min: -60db
-    # analog_gain: -15.5db
-    # mixer_mode: STEREO
+    enable_pin: GPIO4       # optional, to enable/disable the DAC (XSMT pin)
+    volume_max: 0dB         # maximum volume range 0dB, can go up to +24dB
+    volume_min: -60dB       # minimum volume range -60dB, can go down to -103dB
+    analog_gain: -6dB       # or -6Db for 1V RMS output, default is 0dB = 2V RMS output
+    mixer_mode: STEREO      # MIXER MODE: STEREO, STEREO_INVERSE, LEFT, RIGHT
 
 i2s_audio:
-  i2s_lrclk_pin: GPIO25
-  i2s_bclk_pin: GPIO26
+  i2s_lrclk_pin: GPIO15
+  i2s_bclk_pin: GPIO14
 
 speaker:
   - platform: i2s_audio
     id: speaker_id
     dac_type: external
-    i2s_dout_pin: GPIO22
+    i2s_dout_pin: GPIO16
     audio_dac: pcm5122_dac
     channel: stereo
     sample_rate: 48000

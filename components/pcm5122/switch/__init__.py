@@ -4,7 +4,6 @@ import esphome.config_validation as cv
 from esphome.const import DEVICE_CLASS_SWITCH
 
 CONF_ENABLE_DAC = "enable_dac"
-CONF_ENABLE_EQ = "enable_eq"
 
 from ..audio_dac import CONF_PCM5122_ID, Pcm5122Component, pcm5122_ns
 
@@ -27,10 +26,5 @@ async def to_code(config):
   if enable_dac_config := config.get(CONF_ENABLE_DAC):
     s = await switch.new_switch(enable_dac_config)
     await cg.register_component(s, enable_dac_config)
-    await cg.register_parented(s, pcm5122_component)
-
-  if enable_eq_config := config.get(CONF_ENABLE_EQ):
-    s = await switch.new_switch(enable_eq_config)
-    await cg.register_component(s, enable_eq_config)
     await cg.register_parented(s, pcm5122_component)
 
