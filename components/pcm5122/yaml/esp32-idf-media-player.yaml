@@ -41,6 +41,9 @@ psram:
   speed: 80MHz
 
 external_components:
+  # for production, use the released version
+  # - source: github://sonocotta/esphome-pcm5122
+  # for local development, use relative path
   - source: ../..
     components: [ pcm5122 ]
     refresh: 0s
@@ -62,7 +65,7 @@ audio_dac:
     volume_max: 0dB         # maximum volume range 0dB, can go up to +24dB
     volume_min: -60dB       # minimum volume range -60dB, can go down to -103dB
     analog_gain: -6dB       # or -6Db for 1V RMS output, default is 0dB = 2V RMS output
-    mixer_mode: RIGHT      # MIXER MODE: STEREO, STEREO_INVERSE, LEFT, RIGHT
+    mixer_mode: STEREO      # MIXER MODE: STEREO, STEREO_INVERSE, LEFT, RIGHT
 
 i2s_audio:
   i2s_lrclk_pin: GPIO25

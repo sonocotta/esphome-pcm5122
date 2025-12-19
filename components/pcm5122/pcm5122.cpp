@@ -127,23 +127,33 @@ namespace esphome
 
     bool Pcm5122Component::set_mute_off()
     {
+      ESP_LOGD(TAG, "Mute OFF entered");
       if (!this->is_muted_)
         return true;
-      if (!this->pcm5122_write_byte_(PCM51XX_REG_MUTE, PCM51XX_REG_VALUE_UNMUTE))
+
+      if (!this->pcm5122_write_byte_(PCM51XX_REG_MUTE, PCM51XX_REG_VALUE_UNMUTE)) {
+        ESP_LOGD(TAG, "%s unmute", ERROR);
         return false;
+      }
+
       this->is_muted_ = false;
-      ESP_LOGD(TAG, "Mute OFF");
+      ESP_LOGD(TAG, "Mute OFF done");
       return true;
     }
 
     bool Pcm5122Component::set_mute_on()
     {
+      ESP_LOGD(TAG, "Mute ON entered");
       if (this->is_muted_)
         return true;
-      if (!this->pcm5122_write_byte_(PCM51XX_REG_MUTE, PCM51XX_REG_VALUE_MUTE))
+
+      if (!this->pcm5122_write_byte_(PCM51XX_REG_MUTE, PCM51XX_REG_VALUE_MUTE)) {
+        ESP_LOGD(TAG, "%s mute", ERROR);
         return false;
+      }
+
       this->is_muted_ = true;
-      ESP_LOGD(TAG, "Mute ON");
+      ESP_LOGD(TAG, "Mute ON done");
       return true;
     }
 
