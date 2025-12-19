@@ -7,7 +7,7 @@
       "command": "${workspaceFolder}/.venv/bin/esphome",
       "args": [
         "compile",
-        "components/pcm5122/yaml/idf-media-player.yaml"
+        "components/pcm5122/yaml/esp32-idf-media-player.yaml"
       ],
       "env": {
         "PLATFORMIO_CORE_DIR": "${workspaceFolder}/.platformio"
@@ -49,40 +49,13 @@
       "command": "${workspaceFolder}/.venv/bin/esphome",
       "args": [
         "upload",
-        "components/pcm5122/yaml/idf-media-player.yaml",
+        "components/pcm5122/yaml/esp32-idf-media-player.yaml",
         "--device",
         "/dev/tty.usbserial-130"
       ],
       "env": {
         "PLATFORMIO_CORE_DIR": "${workspaceFolder}/.platformio"
       },
-      "group": "build",
-      "problemMatcher": [],
-      "presentation": {
-        "echo": true,
-        "reveal": "always",
-        "focus": false,
-        "panel": "shared"
-      }
-    },
-    {
-      "label": "Build PCM5122 Component (Docker)",
-      "type": "shell",
-      "command": "docker",
-      "args": [
-        "run",
-        "--rm",
-        "-it",
-        "-v",
-        "${workspaceFolder}:${workspaceFolder}",
-        "-v",
-        "${workspaceFolder}/.platformio:/config/.esphome/platformio",
-        "-w",
-        "${workspaceFolder}",
-        "ghcr.io/esphome/esphome",
-        "compile",
-        "components/pcm5122/yaml/idf-media-player.yaml"
-      ],
       "group": "build",
       "problemMatcher": [],
       "presentation": {

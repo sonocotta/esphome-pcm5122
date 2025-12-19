@@ -25,8 +25,6 @@ namespace esphome
 
       void set_enable_pin(GPIOPin *enable) { this->enable_pin_ = enable; }
 
-      // void config_analog_gain(float analog_gain) { this->pcm5122_state_.analog_gain = analog_gain; }
-
       void enable_dac(bool enable);
 
       bool is_muted() override { return this->is_muted_; }
@@ -36,6 +34,8 @@ namespace esphome
       float volume() override;
       bool set_volume(float value) override;
 
+      void config_mixer_mode(MixerMode mixer_mode) {this->pcm5122_state_.mixer_mode = mixer_mode; }
+      void config_analog_gain(float analog_gain) { this->pcm5122_state_.analog_gain = (int8_t)analog_gain; }
       void config_volume_max(float volume_max) {this->pcm5122_state_.volume_max = (int8_t)(volume_max); }
       void config_volume_min(float volume_min) {this->pcm5122_state_.volume_min = (int8_t)(volume_min); }
 
@@ -44,11 +44,8 @@ namespace esphome
 
       bool configure_registers_();
 
-      // bool get_analog_gain_(uint8_t *raw_gain);
-      // bool set_analog_gain_(float gain_db);
-
-      // bool get_dac_mode_(DacMode *mode);
-      // bool set_dac_mode_(DacMode mode);
+      bool get_analog_gain_(int8_t *gain_db);
+      bool set_analog_gain_(int8_t gain_db);
 
       bool set_deep_sleep_off_();
       bool set_deep_sleep_on_();
@@ -59,8 +56,11 @@ namespace esphome
       bool get_state_(ControlState *state);
       bool set_state_(ControlState state);
 
+      bool get_mixer_mode_(MixerMode *mode);
+      bool set_mixer_mode_(MixerMode mode);
+
       // low level functions
-      bool set_book_and_page_(uint8_t book, uint8_t page);
+      bool set_page_(uint8_t page);
 
       bool pcm5122_read_byte_(uint8_t a_register, uint8_t *data);
       bool pcm5122_read_bytes_(uint8_t a_register, uint8_t *data, uint8_t number_bytes);
@@ -75,13 +75,12 @@ namespace esphome
 
       struct Pcm5122State
       {
-        // bool               is_muted;                   // not used as esphome AudioDac component has its own is_muted variable
-        // bool               is_powered;                 // currently not used
-        // float analog_gain;      // configured by YAML
-        int8_t volume_max;      // configured by YAML
-        int8_t volume_min;      // configured by YAML
-        uint8_t raw_volume_max; // initialised in setup
-        uint8_t raw_volume_min; // initialised in setup
+        int8_t analog_gain = 0;     // configured by YAML, default 0dB
+        int8_t volume_max = 24;     // configured by YAML, default 24dB
+        int8_t volume_min = -103;   // configured by YAML, default -103dB
+        MixerMode mixer_mode;     // configured by YAML
+        uint8_t raw_volume_max;     // initialised in setup
+        uint8_t raw_volume_min;     // initialised in setup
 
         ControlState control_state; // initialised in setup
       } pcm5122_state_;

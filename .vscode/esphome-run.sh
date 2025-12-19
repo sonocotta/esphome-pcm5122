@@ -14,4 +14,4 @@ echo "Using device: $DEVICE"
 ESPHOME="${BASH_SOURCE%/*}/../.venv/bin/esphome"
 
 # Run esphome with the found device
-"$ESPHOME" run components/pcm5122/yaml/idf-media-player.yaml --device "$DEVICE"
+"$ESPHOME" run components/pcm5122/yaml/esp32-idf-media-player.yaml --device "$DEVICE"
