@@ -2,6 +2,49 @@
 
 The PCM5122 is a high-performance audio DAC (Digital-to-Analog Converter) designed for portable and automotive audio applications. This ESPHome external component provides easy integration of the PCM5122 DAC with ESP32-based systems for professional audio output.
 
+- [ESPHome Component for PCM5122 DAC](#esphome-component-for-pcm5122-dac)
+- [Why](#why)
+  - [Usage: PCM5122 Component from GitHub](#usage-pcm5122-component-from-github)
+  - [Overview](#overview)
+    - [Key Specifications](#key-specifications)
+  - [Component Features](#component-features)
+  - [Hardware Requirements](#hardware-requirements)
+    - [I2C Interface](#i2c-interface)
+    - [Optional GPIO Enable Pin](#optional-gpio-enable-pin)
+  - [YAML Configuration](#yaml-configuration)
+    - [Basic Audio DAC Configuration](#basic-audio-dac-configuration)
+    - [Complete Configuration Example](#complete-configuration-example)
+    - [Configuration Variables](#configuration-variables)
+      - [audio\_dac](#audio_dac)
+  - [Switches](#switches)
+  - [DSP Process Flow Select](#dsp-process-flow-select)
+    - [Available Process Flows](#available-process-flows)
+  - [6-Band Parametric EQ (Biquad Filter Controls)](#6-band-parametric-eq-biquad-filter-controls)
+    - [Example EQ Configuration](#example-eq-configuration)
+    - [EQ Band Configuration Variables](#eq-band-configuration-variables)
+    - [Known issues](#known-issues)
+  - [Volume Control](#volume-control)
+    - [Setting Volume in YAML](#setting-volume-in-yaml)
+    - [Volume Control via Automations](#volume-control-via-automations)
+  - [Mute Control](#mute-control)
+    - [I2C Register-based Mute](#i2c-register-based-mute)
+    - [Optional GPIO Mute Pin](#optional-gpio-mute-pin)
+    - [Mute Control in YAML](#mute-control-in-yaml)
+  - [Integration with I2S Audio](#integration-with-i2s-audio)
+  - [Power Modes](#power-modes)
+    - [Play Mode (Enabled)](#play-mode-enabled)
+    - [Sleep Mode (Deep Sleep)](#sleep-mode-deep-sleep)
+  - [Complete Example YAML](#complete-example-yaml)
+  - [Troubleshooting](#troubleshooting)
+    - [DAC Not Initializing](#dac-not-initializing)
+    - [No Audio Output](#no-audio-output)
+    - [EQ Controls Not Working](#eq-controls-not-working)
+    - [I2C Communication Errors](#i2c-communication-errors)
+  - [Component Files](#component-files)
+  - [License](#license)
+  - [References](#references)
+
+
 # Why
 
 I've created a [HiFi-ESP32-Plus](https://sonocotta.com/hifi-esp32-and-hifi-esp32s3/) and [Amped-ESP32-Plus](https://sonocotta.com/amped-esp32/) boards, that uses this DAC, and I wanted to integrate this DAC into the Home Assistant. Even though it is a fairly old DAC, and TI doesn't update they tooling to support it properly, it is still great chip for the price 
@@ -19,7 +62,7 @@ external_components:
 
 ## Overview
 
-The PCM5122 is a versatile audio DAC that communicates with the ESP32 via I2C interface (control) and I2S (audio). This component allows basic control of the DAC's features including digital volume adjustment, mute control, analog gain, basic mixer controls and power management through Home Assistant or direct ESPHome automation. A
+The PCM5122 is a versatile audio DAC that communicates with the ESP32 via I2C interface (control) and I2S (audio). This component allows basic control of the DAC's features including digital volume adjustment, mute control, analog gain, basic mixer controls and power management through Home Assistant or direct ESPHome automation.
 
 ### Key Specifications
 
@@ -30,6 +73,8 @@ The PCM5122 is a versatile audio DAC that communicates with the ESP32 via I2C in
 - **Mute Control**: Register-based (always available) and optional GPIO-based mute
 - **Default I2C Address**: 0x4D (7-bit)
 - **Power Modes**: Play mode (active audio) and Sleep mode (low power)
+- **DSP Process Flow Selection**: Multiple interpolation filter options including parametric EQ
+- **6-Band Parametric EQ**: Configurable biquad filters with adjustable gain, frequency, Q-factor, and filter type
 
 ## Component Features
 
@@ -43,6 +88,8 @@ The PCM5122 ESPHome component provides the following capabilities:
 - **Power Management** - Enable Deep Sleep mode for low-power operation
 - **Volume Range Configuration** - Define maximum and minimum volume limits in dB
 - **Basic Mixer control** - Stereo (default), Stereo (inverted channels), Left or Right channel only 
+- **DSP Process Flow Select** - Choose between 5 built-in DSP processing paths (including Parametric EQ) via Home Assistant select entity
+- **6-Band Parametric EQ** - Full biquad filter control with per-band gain adjustment, configurable frequency, Q-factor, and filter type
 
 ## Hardware Requirements
 
@@ -83,6 +130,8 @@ audio_dac:
     enable_pin: GPIO13
     volume_max: 0
     volume_min: -103
+    analog_gain: 0dB
+    mixer_mode: STEREO
 ```
 
 ### Configuration Variables
@@ -98,10 +147,137 @@ audio_dac:
   - `-6dB`: Use for 1V RMS output signal
 - **volume_max** (*Optional*): Maximum volume level in dB. Valid range: -103 to 24. Default: `0` dB, to guarantee no clipping
 - **volume_min** (*Optional*): Minimum volume level in dB. Valid range: -103 to 24. Default: `-103` dB, but maybe raised to limit dynamic range. Reasonable value is -60dB.
+- **mixer_mode** (*Optional*): Channel mixer mode. Valid values: `STEREO` (default), `STEREO_INVERSE`, `LEFT`, `RIGHT`.
 
 ## Switches
 
 An optional switch can be configured to control the DAC enable/disable state in Home Assistant.
+
+```yaml
+switch:
+  - platform: pcm5122
+    enable_dac:
+      name: "Enable DAC"
+      id: enable_dac
+      restore_mode: ALWAYS_OFF
+```
+
+## DSP Process Flow Select
+
+The PCM5122 supports multiple DSP processing paths via its process flow register. This can be controlled through a Home Assistant select entity, allowing runtime switching between different filter and interpolation modes.
+
+```yaml
+select:
+  - platform: pcm5122
+    process_flow:
+      name: "PCM5122 Process Flow"
+      id: pcm5122_process_flow
+```
+
+### Available Process Flows
+
+| Flow | Name | Description |
+|------|------|-------------|
+| Flow 1 | FIR Interpolation | FIR interpolation filter with de-emphasis |
+| Flow 2 | Low-latency IIR | Low latency IIR interpolation filter |
+| Flow 3 | High-attenuation FIR | High attenuation FIR interpolation filter |
+| Flow 5 | Parametric EQ | Fixed process flow with configurable biquad parameters (enables EQ) |
+| Flow 7 | Ringing-less FIR | Ringing-less low latency FIR interpolation filter |
+
+**Note:** Flow 5 (Parametric EQ) enables the 6-band biquad filter engine. This flow is required for the EQ band controls to have an audible effect. The selection is persisted across reboots.
+
+## 6-Band Parametric EQ (Biquad Filter Controls)
+
+When using Process Flow 5 (Parametric EQ), the PCM5122's internal DSP provides 6 configurable biquad filter bands. Each band supports the following parameters:
+
+- **Gain** (adjustable in Home Assistant, -24 dB to +24 dB, 0.5 dB steps)
+- **Filter type** (configured in YAML)
+- **Center frequency** (configured in YAML, 1-20000 Hz)
+- **Q-factor** (configured in YAML)
+
+### Example EQ Configuration
+
+```yaml
+number:
+  - platform: pcm5122
+    band_1:
+      filter_type: "Low Shelf"        # Filter type: "Low Shelf", "High Shelf", "Equalizer", "Low Pass", "High Pass"
+      frequency: 50                    # Center frequency (Hz), range 1-20000
+      q_factor: 1.5                    # Q-factor, range 0.1-10.0
+      min_gain: -12dB                  # Minimum slider value
+      max_gain: 12dB                   # Maximum slider value
+      gain:
+        name: "63 Hz"
+
+    band_2:
+      filter_type: "Equalizer"
+      frequency: 250
+      q_factor: 1.0
+      min_gain: -12dB
+      max_gain: 12dB
+      gain:
+        name: "250 Hz"
+
+    band_3:
+      filter_type: "Equalizer"
+      frequency: 1000
+      q_factor: 0.9
+      min_gain: -12dB
+      max_gain: 12dB
+      gain:
+        name: "1000 Hz"
+
+    band_4:
+      filter_type: "Equalizer"
+      frequency: 4000
+      q_factor: 0.8
+      min_gain: -12dB
+      max_gain: 12dB
+      gain:
+        name: "4000 Hz"
+
+    band_5:
+      filter_type: "Equalizer"
+      frequency: 8000
+      q_factor: 0.7
+      min_gain: -12dB
+      max_gain: 12dB
+      gain:
+        name: "8000 Hz"
+
+    band_6:
+      filter_type: "High Shelf"
+      frequency: 16000
+      q_factor: 0.6
+      min_gain: -12dB
+      max_gain: 12dB
+      gain:
+        name: "16000 Hz"
+```
+
+### EQ Band Configuration Variables
+
+Each `band_N` block supports:
+
+- **filter_type** (*Optional*, default: `"Equalizer"`): Biquad filter type. One of:
+  - `"Equalizer"` - Peaking EQ (bell curve)
+  - `"Low Shelf"` - Low shelving filter
+  - `"High Shelf"` - High shelving filter
+  - `"Low Pass"` - Low pass filter
+  - `"High Pass"` - High pass filter
+- **frequency** (*Optional*, default: `1000`): Center/corner frequency in Hz (1-20000).
+- **q_factor** (*Optional*, default: `1.0`): Quality factor (0.1-10.0).
+- **min_gain** (*Optional*, default: `-12dB`): Minimum gain value for the Home Assistant slider (-24 to 24 dB).
+- **max_gain** (*Optional*, default: `12dB`): Maximum gain value for the Home Assistant slider (-24 to 24 dB).
+- **gain** (*Required*): ESPHome number entity schema for the adjustable gain control. Must have a `name:` property.
+
+**Note:** The filter type, frequency, and Q-factor are static configuration values set in YAML and cannot be changed at runtime. Only the gain per band is adjustable via Home Assistant. The gain is stored in the number entity's preferences and restored on reboot.
+
+### Known issues
+
+Since I don't have PCM5122 EVM (and could not fine a second-hand one), and PPC app would not allow exporting BQ parameters without device connected, I had to do a fir bit of reverse engineering to determine the data format and calculation formulas for each filter type. The only helpful part of the datasheet is the information on the correct register addresses for the biquad filter configuration, but even there lots of koefficients exist that lacks documentation and they are required to be set for audio processing. 
+
+While I have tested that changes to the gain parameter do have an effect on the audio output, I have not been able to fully verify that the frequency and Q-factor settings are applied correctly, due to lack of test equipment. If you notice any issues with the EQ controls or if the frequency/Q settings don't seem to have any effect, please open an issue with details about your hardware setup and observations. At this point I'm pretty sure it doesn't work correctly at high frequencies and at high gain values, but I'm not able to determine if that is expected behavior of the filters or if there is a bug in the implementation.
 
 ## Volume Control
 
@@ -204,7 +380,7 @@ When the DAC is disabled:
 
 ## Complete Example YAML
 
-Can be found in the example for [ESP32](/components/pcm5122/yaml/esp32-idf-media-player.yaml) and [ESP32-S3](/components/pcm5122/yaml/esp32s3-idf-media-player.yaml)
+Can be found in the example for [ESP32](/components/pcm5122/yaml/hifi-esp32-plus-media-player.yaml) and [ESP32-S3](/components/pcm5122/yaml/hifi-esp32s3-plus-media-player.yaml), including full EQ configuration in [pcm5122-dac.yaml](/components/pcm5122/yaml/pcm5122-dac.yaml).
 
 ## Troubleshooting
 
@@ -212,7 +388,7 @@ Can be found in the example for [ESP32](/components/pcm5122/yaml/esp32-idf-media
 
 1. **Check I2C Connection**
    ```bash
-   esphome logs components/pcm5122/yaml/idf-media-player.yaml
+   esphome logs components/pcm5122/yaml/hifi-esp32s3-plus-media-player.yaml
    ```
    Look for I2C initialization messages and any I2C errors.
 
@@ -239,6 +415,16 @@ Can be found in the example for [ESP32](/components/pcm5122/yaml/esp32-idf-media
    - Confirm volume is not set to 0%
    - Check that volume_min/volume_max are within valid range
 
+### EQ Controls Not Working
+
+1. **Select Process Flow 5**
+   - The 6-band parametric EQ only functions when Process Flow 5 (Parametric EQ) is selected via the process flow select entity
+   - Other process flows bypass the biquad filter coefficients entirely
+
+2. **Verify EQ Band Gain**
+   - Each EQ band has a `min_gain` and `max_gain` setting - ensure the range is appropriate for your use case
+   - If gain values don't seem to have any effect, verify the DAC is not muted
+
 ### I2C Communication Errors
 
 1. **Enable Debug Logging**
@@ -257,10 +443,14 @@ The PCM5122 component consists of:
 
 - `pcm5122.h` - Component header file with class definitions
 - `pcm5122.cpp` - Component implementation
-- `audio_dac.py` - ESPHome integration for YAML configuration
-- `binary_sensor.py` - Optional binary sensors for fault detection
-- `switch/__init__.py` - Optional switches for DAC control
 - `pcm5122_cfg.h` - Configuration and register definitions
+- `audio_dac.py` - ESPHome integration for YAML configuration
+- `switch/__init__.py` - Optional switches for DAC enable/disable control
+- `switch/enable_dac_switch.cpp` / `.h` - DAC enable switch implementation
+- `select/__init__.py` - Optional process flow select entity
+- `select/process_flow_select.cpp` / `.h` - Process flow selection implementation
+- `number/__init__.py` - Optional 6-band parametric EQ number entities
+- `number/eq_band_gain.cpp` / `.h` - EQ band gain control implementation
 
 ## License
 
