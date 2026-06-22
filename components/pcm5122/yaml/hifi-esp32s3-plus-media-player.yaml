@@ -1,4 +1,4 @@
-esphome:
+substitutions:
   name: esphome-web-e8bbc8
   friendly_name: HiFi-ESP32S3-Ы3-Plus
   task_stack_in_psram: "true"
