@@ -135,7 +135,6 @@ namespace esphome
         LOG_PIN("  Enable Pin: ", this->enable_pin_);
         LOG_I2C_DEVICE(this);
         ESP_LOGCONFIG(TAG,
-                      "  Registers configured: %i\n"
                       "  Analog Gain: %idB\n"
                       "  Maximum Volume: %idB\n"
                       "  Minimum Volume: %idB\n"
@@ -259,7 +258,7 @@ namespace esphome
       }
 
       this->pcm5122_state_.analog_gain = gain_db;
-      ESP_LOGD(TAG, "Analog Gain: %fdB", gain_db);
+      ESP_LOGD(TAG, "Analog Gain: %ddB", gain_db);
       return true;
     }
 
